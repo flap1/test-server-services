@@ -2,7 +2,7 @@
   "production": {
     "urlAddPort": true,
     "email": true,
-    "imageUploadType": "imgur",
+    "imageUploadType": "local",
     "sessionName": "connect.codimd.sid"
   }
 }
