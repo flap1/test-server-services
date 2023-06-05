@@ -1,0 +1,65 @@
+version: '3'
+
+services:
+  issl-growi:
+    container_name: issl-growi
+    image: weseek/growi:latest
+    environment:
+      - MONGO_URI=mongodb://issl-mongo:27017/growi
+      - ELASTICSEARCH_URI=http://issl-elasticsearch:9200/growi
+      - PASSWORD_SEED=some-secret-string
+      - FILE_UPLOAD=local
+      - HACKMD_URI=http://issl-hackmd:3000
+      # - REDIS_URI=redis://issl-redis:6379
+    depends_on:
+      - issl-mongo
+      - issl-elasticsearch
+    ports:
+      - 3000:3000
+    volumes:
+      - ./data/issl-growi:/data
+
+  issl-mongo:
+    container_name: issl-mongo
+    image: mongo:4.4-bionic
+    volumes:
+      - ./data/issl-mongo:/data/db
+
+  issl-elasticsearch:
+    container_name: issl-elasticsearch
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.10.2
+    environment:
+      - discovery.type=single-node
+    volumes:
+      - ./data/issl-elasticsearch:/usr/share/elasticsearch/data
+
+  issl-hackmd:
+    container_name: issl-hackmd
+    image: hackmdio/hackmd:2.4.2
+    environment:
+      - CMD_DB_URL=postgres://hackmd:hackmd@issl-postgres:5432/hackmd
+      - CMD_DOMAIN=localhost
+      - CMD_PROTOCOL_USESSL=false
+    depends_on:
+      - issl-postgres
+    ports:
+      - 3001:3000
+    volumes:
+      - ./data/issl-hackmd:/hackmd
+
+  issl-postgres:
+    container_name: issl-postgres
+    image: postgres:13.3-alpine
+    environment:
+      - POSTGRES_USER=hackmd
+      - POSTGRES_PASSWORD=hackmd
+      - POSTGRES_DB=hackmd
+    volumes:
+      - ./data/issl-postgres:/var/lib/postgresql/data
+
+  # issl-redis:
+  #   container_name: issl-redis
+  #   image: redis:6.2-alpine
+  #   volumes:
+  #     - ./data/issl-redis:/data
+
