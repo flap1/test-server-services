@@ -3,59 +3,88 @@ version: '3'
 services:
   issl-growi:
     container_name: issl-growi
-    image: weseek/growi:latest
+    build:
+      context: .
+      dockerfile: ./growi/Dockerfile
+    image: issl-growi-img
+    ports:
+      - 127.0.0.1:3000:3000    # localhost only by default
+    links:
+      - issl-mongo:issl-mongo
+      - issl-elasticsearch:issl-elasticsearch
     environment:
       - MONGO_URI=mongodb://issl-mongo:27017/growi
       - ELASTICSEARCH_URI=http://issl-elasticsearch:9200/growi
-      - PASSWORD_SEED=some-secret-string
+      - PASSWORD_SEED=password
       - FILE_UPLOAD=local
+      - MATHJAX=1
       - HACKMD_URI=http://issl-hackmd:3000
-      # - REDIS_URI=redis://issl-redis:6379
+    entrypoint: "dockerize
+                  -wait tcp://mongo:27017
+                  -wait tcp://elasticsearch:9200
+                  -timeout 60s
+                  /docker-entrypoint.sh"
     depends_on:
       - issl-mongo
       - issl-elasticsearch
-    ports:
-      - 3000:3000
+    restart: unless-stopped
     volumes:
       - ./data/issl-growi:/data
 
   issl-mongo:
     container_name: issl-mongo
     image: mongo:4.4-bionic
+    restart: unless-stopped
     volumes:
+      - ./data/issl-mongo-config:/data/configdb
       - ./data/issl-mongo:/data/db
 
   issl-elasticsearch:
     container_name: issl-elasticsearch
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.10.2
+    build:
+      context: .
+      dockerfile: ./growi/Dockerfile
+    image: issl-elasticsearch-img
     environment:
-      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms256m -Xmx256m"  # increase amount if you have enough memory
+      - LOG4J_FORMAT_MSG_NO_LOOKUPS=true # CVE-2021-44228 mitigation for Elasticsearch <= 6.8.20/7.16.0
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     volumes:
       - ./data/issl-elasticsearch:/usr/share/elasticsearch/data
+      - ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
 
   issl-hackmd:
     container_name: issl-hackmd
-    image: hackmdio/hackmd:2.4.2
+    build:
+      context: .
+      dockerfile: ./hackmd/Dockerfile
+    image: issl-hackmd-img
     environment:
-      - CMD_DB_URL=postgres://hackmd:hackmd@issl-postgres:5432/hackmd
-      - CMD_DOMAIN=localhost
-      - CMD_PROTOCOL_USESSL=false
-    depends_on:
-      - issl-postgres
+      - GROWI_URI=http://issl-growi:3000
+      - CMD_DB_URL=mysql://hackmd:hackmdpass@mariadb:3306/hackmd
+      - CMD_CSP_ENABLE=false
     ports:
-      - 3001:3000
-    volumes:
-      - ./data/issl-hackmd:/hackmd
+      - 127.0.0.1:3100:3000   # localhost only by default
+    depends_on:
+      - issl-mariadb
+    restart: unless-stopped
 
-  issl-postgres:
-    container_name: issl-postgres
-    image: postgres:13.3-alpine
+  issl-mariadb:
+    container_name: issl-mariadb
+    image: mariadb:10.3
+    command: mysqld --character-set-server=utf8 --collation-server=utf8_general_ci
     environment:
-      - POSTGRES_USER=hackmd
-      - POSTGRES_PASSWORD=hackmd
-      - POSTGRES_DB=hackmd
+      - MYSQL_USER=hackmd
+      - MYSQL_PASSWORD=hackmdpass
+      - MYSQL_DATABASE=hackmd
+      - MYSQL_RANDOM_ROOT_PASSWORD=true
+    restart: unless-stopped
     volumes:
-      - ./data/issl-postgres:/var/lib/postgresql/data
+      - ./data/issl-mariadb:/var/lib/mysql
 
   # issl-redis:
   #   container_name: issl-redis
